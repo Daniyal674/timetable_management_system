@@ -43,7 +43,25 @@
                 <label for="password" class="form-label">Password</label>
                 <input type="password" class="form-control" id="password" name="password" required>
             </div>
-            <button type="submit" class="btn btn-primary w-100">Login</button>
+            <div class="mb-3">
+                <label for="role" class="form-label">Login As</label>
+                <select class="form-select" id="role" name="role">
+                    <option value="student">Student (View Only)</option>
+                    <option value="admin">Admin</option>
+                    <option value="cr">CR</option>
+                    <option value="gr">GR</option>
+                </select>
+                <script>
+                    document.getElementById('role').addEventListener('change', function() {
+                        if (this.value === 'student') {
+                            window.location.href = '/';
+                        }
+                    });
+                </script>
+            </div>
+            
+            <button type="submit" class="btn btn-primary w-100 mb-2">Login</button>
+            <a href="/" class="btn btn-outline-secondary w-100">Continue as Student</a>
         </form>
     </div>
 </body>

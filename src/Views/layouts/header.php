@@ -14,7 +14,10 @@
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
         <div class="container">
-            <a class="navbar-brand" href="/">Timetable System</a>
+            <a class="navbar-brand d-flex align-items-center" href="/">
+                <img src="/assets/images/logo.png" alt="Logo" height="40" class="me-2">
+                Timetable System
+            </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>

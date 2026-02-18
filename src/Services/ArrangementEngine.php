@@ -56,16 +56,32 @@ class ArrangementEngine
         return null; // No conflict
     }
 
-    public function getAvailableRooms($day, $timeSlot)
+    public function getAvailableRooms($day, $start, $end)
     {
+        // Find rooms NOT occupied during this interval
+        // Overlap logic: (StartA < EndB) AND (EndA > StartB)
+        // We want rooms where NO class overlaps.
+        
         $sql = "SELECT * FROM rooms 
                 WHERE id NOT IN (
                     SELECT room_id FROM timetable 
-                    WHERE day = ? AND time_slot = ? AND status != 'cancelled' AND room_id IS NOT NULL
+                    WHERE day = ? 
+                    AND status != 'cancelled' 
+                    AND room_id IS NOT NULL
+                    AND (
+                        (start_time < ? AND end_time > ?) OR
+                        -- Fallback checks if start_time/end_time null? 
+                        -- Ideally we migrated all. MVP assumption: we have times.
+                        (start_time IS NULL) 
+                    )
                 )
                 ORDER BY name";
+        
         $stmt = $this->pdo->prepare($sql);
-        $stmt->execute([$day, $timeSlot]);
+        // Param 1: Day
+        // Param 2: Query End (end of requested slot) > Class Start
+        // Param 3: Query Start (start of requested slot) < Class End
+        $stmt->execute([$day, $end, $start]);
         return $stmt->fetchAll(\PDO::FETCH_ASSOC);
     }
 

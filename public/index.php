@@ -29,6 +29,8 @@ $exportController = new ExportController($pdo);
 // Routing Logic
 switch ($uri) {
     case '/':
+        $timetableController->publicIndex();
+        break;
     case '/login':
         $authController->login();
         break;

@@ -18,6 +18,20 @@ class TimetableController
 
     public function index()
     {
+        $data = $this->getTimetableData();
+        extract($data);
+        require '../src/Views/admin/timetable.php';
+    }
+
+    public function publicIndex()
+    {
+        $data = $this->getTimetableData();
+        extract($data);
+        require '../src/Views/public/timetable.php';
+    }
+
+    private function getTimetableData()
+    {
         // 1. Fetch Filter Data
         $semStmt = $this->pdo->query("SELECT s.id, s.number, b.name as batch_name 
                                       FROM semesters s 
@@ -25,9 +39,13 @@ class TimetableController
                                       ORDER BY b.name, s.number");
         $semesters = $semStmt->fetchAll();
 
-        // Fetch Section Types (Distinct)
-        $secTypeStmt = $this->pdo->query("SELECT DISTINCT type FROM sections");
-        $sectionTypes = $secTypeStmt->fetchAll(\PDO::FETCH_COLUMN);
+        $batchesStmt = $this->pdo->query("SELECT * FROM batches ORDER BY name");
+        $batches = $batchesStmt->fetchAll();
+
+        // Fetch Sections if Batch selected, else all (or empty?)
+        // For UI simplicity, we might fetch all and let JS filter, or just fetch all.
+        $sectionsStmt = $this->pdo->query("SELECT s.*, b.name as batch_name FROM sections s JOIN batches b ON s.batch_id = b.id ORDER BY b.name, s.name");
+        $sections = $sectionsStmt->fetchAll();
 
         // 2. Build Query with Filters
         $where = ["1=1"];
@@ -38,16 +56,24 @@ class TimetableController
             $params[] = $_GET['semester_id'];
         }
 
-        if (!empty($_GET['section_type'])) {
-            // Join sections to filter by type
-            // Note: Section join is already in main query but we filter here
-            $where[] = "sec.type = ?";
-            $params[] = $_GET['section_type'];
+        if (!empty($_GET['batch_id'])) {
+            $where[] = "t.batch_id = ?";
+            $params[] = $_GET['batch_id'];
+        }
+
+        if (!empty($_GET['section_id'])) {
+            $where[] = "t.section_id = ?";
+            $params[] = $_GET['section_id'];
         }
 
         if (!empty($_GET['subject_search'])) {
             $where[] = "s.name LIKE ?";
             $params[] = '%' . $_GET['subject_search'] . '%';
+        }
+
+        if (!empty($_GET['teacher_search'])) {
+            $where[] = "tr.name LIKE ?";
+            $params[] = '%' . $_GET['teacher_search'] . '%';
         }
 
         $whereClause = implode(" AND ", $where);
@@ -75,22 +101,14 @@ class TimetableController
 
         $matrix = [];
         $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-        $timeSlots = [
-            '08:00 - 09:30',
-            '09:30 - 11:00',
-            '11:00 - 12:30',
-            '12:30 - 14:00',
-            '14:00 - 15:30',
-            '15:30 - 17:00'
-        ];
-
+        
         foreach ($timetables as $row) {
             $d = $row['day'];
             $rid = $row['room_id'] ?? 0;
             $matrix[$d][$rid][] = $row;
         }
 
-        require '../src/Views/admin/timetable.php';
+        return compact('semesters', 'batches', 'sections', 'timetables', 'allRooms', 'matrix', 'days');
     }
 
     public function create()
@@ -110,11 +128,13 @@ class TimetableController
                 // For now, let's just insert.
                 // Ideally user selects semester too.
                 $semesterId = $_POST['semester_id'] ?? 1; // Default
+                
+                $times = $this->parseTimeSlot($timeSlot);
 
                 $stmt = $this->pdo->prepare("INSERT INTO timetable 
-                    (batch_id, section_id, semester_id, subject_id, teacher_id, room_id, day, time_slot, status)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'scheduled')");
-                $stmt->execute([$batchId, $sectionId, $semesterId, $subjectId, $teacherId, $roomId, $day, $timeSlot]);
+                    (batch_id, section_id, semester_id, subject_id, teacher_id, room_id, day, time_slot, start_time, end_time, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled')");
+                $stmt->execute([$batchId, $sectionId, $semesterId, $subjectId, $teacherId, $roomId, $day, $timeSlot, $times[0], $times[1]]);
                 $_SESSION['flash_message'] = "Class added successfully.";
             } else {
                 $_SESSION['flash_message'] = "Error: Missing required fields.";
@@ -217,8 +237,11 @@ class TimetableController
                     } else {
                         // Insert new
                         $stmt = $this->pdo->prepare("INSERT INTO timetable 
-                            (batch_id, section_id, semester_id, subject_id, teacher_id, room_id, day, time_slot, status)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'scheduled')");
+                            (batch_id, section_id, semester_id, subject_id, teacher_id, room_id, day, time_slot, start_time, end_time, status)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled')");
+
+                        // Parse time
+                        $times = $this->parseTimeSlot($row['time_slot']);
 
                         $stmt->execute([
                             $batchId,
@@ -228,7 +251,9 @@ class TimetableController
                             $teacherId,
                             $roomId,
                             $row['day'],
-                            $row['time_slot']
+                            $row['time_slot'],
+                            $times[0],
+                            $times[1]
                         ]);
                     }
                     $count++;
@@ -317,5 +342,16 @@ class TimetableController
         $stmt = $this->pdo->prepare("INSERT INTO semesters (batch_id, number) VALUES (?, ?)");
         $stmt->execute([$batchId, $cleanNumber]);
         return $this->pdo->lastInsertId();
+    }
+
+    private function parseTimeSlot($slot)
+    {
+        // Expected format: "08:00 - 09:30"
+        if (preg_match('/(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})/', $slot, $matches)) {
+            $start = date("H:i:s", strtotime($matches[1]));
+            $end = date("H:i:s", strtotime($matches[2]));
+            return [$start, $end];
+        }
+        return [null, null];
     }
 }

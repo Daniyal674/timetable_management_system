@@ -96,8 +96,18 @@ require '../src/Views/layouts/header.php';
             <div class="card-body py-2">
                 <form method="GET" action="/admin/timetable" class="row g-2 align-items-center">
                     <div class="col-auto">
-                        <label class="col-form-label fw-bold">Filter By:</label>
+                        <label class="col-form-label fw-bold">Filter:</label>
                     </div>
+                    
+                    <!-- Search Inputs -->
+                    <div class="col-auto">
+                        <input type="text" name="subject_search" class="form-control form-control-sm" placeholder="Subject..." value="<?= htmlspecialchars($_GET['subject_search'] ?? '') ?>">
+                    </div>
+                    <div class="col-auto">
+                        <input type="text" name="teacher_search" class="form-control form-control-sm" placeholder="Teacher..." value="<?= htmlspecialchars($_GET['teacher_search'] ?? '') ?>">
+                    </div>
+
+                    <!-- Dropdowns -->
                     <div class="col-auto">
                          <select name="semester_id" class="form-select form-select-sm">
                              <option value="">All Semesters</option>
@@ -108,6 +118,31 @@ require '../src/Views/layouts/header.php';
                              <?php endforeach; ?>
                          </select>
                     </div>
+
+                    <div class="col-auto">
+                         <select name="batch_id" class="form-select form-select-sm" onchange="this.form.submit()">
+                             <option value="">All Batches</option>
+                             <?php foreach($batches as $b): ?>
+                                <option value="<?= $b['id'] ?>" <?= (isset($_GET['batch_id']) && $_GET['batch_id'] == $b['id']) ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($b['name']) ?>
+                                </option>
+                             <?php endforeach; ?>
+                         </select>
+                    </div>
+
+                    <div class="col-auto">
+                         <select name="section_id" class="form-select form-select-sm">
+                             <option value="">All Sections</option>
+                             <?php foreach($sections as $s): ?>
+                                <?php if(empty($_GET['batch_id']) || $_GET['batch_id'] == $s['batch_id']): ?>
+                                    <option value="<?= $s['id'] ?>" <?= (isset($_GET['section_id']) && $_GET['section_id'] == $s['id']) ? 'selected' : '' ?>>
+                                        <?= htmlspecialchars($s['batch_name']) ?> - <?= htmlspecialchars($s['name']) ?>
+                                    </option>
+                                <?php endif; ?>
+                             <?php endforeach; ?>
+                         </select>
+                    </div>
+
                     <div class="col-auto">
                         <button type="submit" class="btn btn-sm btn-primary">Apply</button>
                         <a href="/admin/timetable" class="btn btn-sm btn-outline-secondary">Reset</a>
@@ -235,18 +270,21 @@ require '../src/Views/layouts/header.php';
       <div class="modal-body">
             <div class="row g-2 mb-3">
                 <div class="col-md-4">
+                    <label class="form-label small mb-1">Day</label>
                     <select id="searchDay" class="form-select">
                         <option value="">Select Day...</option>
                         <?php foreach($days as $d): ?><option value="<?= $d ?>"><?= $d ?></option><?php endforeach; ?>
                     </select>
                 </div>
-                <div class="col-md-4">
-                    <select id="searchTime" class="form-select">
-                        <option value="">Select Time Slot...</option>
-                         <?php foreach($timeSlots as $t): ?><option value="<?= $t ?>"><?= $t ?></option><?php endforeach; ?>
-                    </select>
+                <div class="col-md-3">
+                    <label class="form-label small mb-1">From</label>
+                    <input type="time" id="searchStart" class="form-control">
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
+                    <label class="form-label small mb-1">To</label>
+                    <input type="time" id="searchEnd" class="form-control">
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
                     <button class="btn btn-primary w-100" onclick="searchAvailability()">Search</button>
                 </div>
             </div>
@@ -278,14 +316,15 @@ function toggleStatus(id, status) {
 // --- Availability Search Logic ---
 function searchAvailability() {
     const day = document.getElementById('searchDay').value;
-    const time = document.getElementById('searchTime').value;
+    const start = document.getElementById('searchStart').value;
+    const end = document.getElementById('searchEnd').value;
     const resDiv = document.getElementById('availabilityResults');
     
-    if(!day || !time) { alert('Please select day and time'); return; }
+    if(!day || !start || !end) { alert('Please select day, start time, and end time'); return; }
     
     resDiv.innerHTML = '<div class="text-center"><div class="spinner-border text-primary"></div> Checking...</div>';
     
-    fetch(`/api/arrangement/available-rooms?day=${day}&time=${encodeURIComponent(time)}`)
+    fetch(`/api/arrangement/available-rooms?day=${day}&start=${start}&end=${end}`)
     .then(res => res.json())
     .then(rooms => {
         if(rooms.length === 0) {
